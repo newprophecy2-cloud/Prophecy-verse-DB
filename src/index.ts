@@ -1,7 +1,6 @@
 
 export interface Env {
   DB: D1Database;
-  API_TOKEN: string;
   ALLOWED_ORIGINS?: string;
 }
 
@@ -74,15 +73,6 @@ export default {
     try {
       validateEnvironment(env);
 
-      if (!authenticate(request, env)) {
-        return json(
-          { success: false, error: "Unauthorized" },
-          401,
-          request,
-          env
-        );
-      }
-
       if (!url.pathname.startsWith(API_PREFIX)) {
         return json(
           { success: false, error: "Route not found" },
@@ -146,7 +136,6 @@ export default {
       }
 
       const tableName = path[1];
-
       const table = await getTableInfo(env.DB, tableName);
 
       if (!table) {
@@ -166,25 +155,13 @@ export default {
       if (path.length === 2) {
         switch (request.method) {
           case "GET":
-            return await listRecords(
-              request,
-              env,
-              table
-            );
+            return await listRecords(request, env, table);
 
           case "POST":
-            return await createRecord(
-              request,
-              env,
-              table
-            );
+            return await createRecord(request, env, table);
 
           case "PUT":
-            return await upsertRecord(
-              request,
-              env,
-              table
-            );
+            return await upsertRecord(request, env, table);
 
           default:
             return methodNotAllowed(request, env);
@@ -197,11 +174,7 @@ export default {
           return methodNotAllowed(request, env);
         }
 
-        return await bulkInsert(
-          request,
-          env,
-          table
-        );
+        return await bulkInsert(request, env, table);
       }
 
       // POST /v1/tables/:table/upsert
@@ -213,11 +186,7 @@ export default {
           return methodNotAllowed(request, env);
         }
 
-        return await upsertRecord(
-          request,
-          env,
-          table
-        );
+        return await upsertRecord(request, env, table);
       }
 
       // GET /v1/tables/:table/:id
@@ -229,36 +198,16 @@ export default {
 
         switch (request.method) {
           case "GET":
-            return await getRecord(
-              request,
-              env,
-              table,
-              id
-            );
+            return await getRecord(request, env, table, id);
 
           case "PATCH":
-            return await updateRecord(
-              request,
-              env,
-              table,
-              id
-            );
+            return await updateRecord(request, env, table, id);
 
           case "PUT":
-            return await updateRecord(
-              request,
-              env,
-              table,
-              id
-            );
+            return await updateRecord(request, env, table, id);
 
           case "DELETE":
-            return await deleteRecord(
-              request,
-              env,
-              table,
-              id
-            );
+            return await deleteRecord(request, env, table, id);
 
           default:
             return methodNotAllowed(request, env);
@@ -314,48 +263,13 @@ class HttpError extends Error {
 }
 
 // --------------------------------------------------
-// ENVIRONMENT AND AUTHENTICATION
+// ENVIRONMENT
 // --------------------------------------------------
 
 function validateEnvironment(env: Env): void {
   if (!env.DB) {
     throw new HttpError("D1 database binding is missing", 500);
   }
-
-  if (!env.API_TOKEN || env.API_TOKEN.length < 24) {
-    throw new HttpError(
-      "API_TOKEN is missing or too short",
-      500
-    );
-  }
-}
-
-function authenticate(
-  request: Request,
-  env: Env
-): boolean {
-  const authorization = request.headers.get("Authorization");
-
-  if (!authorization?.startsWith("Bearer ")) {
-    return false;
-  }
-
-  const suppliedToken = authorization.slice(7);
-
-  if (suppliedToken.length !== env.API_TOKEN.length) {
-    return false;
-  }
-
-  // Constant-time-style comparison for equal-length tokens.
-  let difference = 0;
-
-  for (let i = 0; i < suppliedToken.length; i++) {
-    difference |=
-      suppliedToken.charCodeAt(i) ^
-      env.API_TOKEN.charCodeAt(i);
-  }
-
-  return difference === 0;
 }
 
 // --------------------------------------------------
@@ -367,6 +281,7 @@ function corsHeaders(
   env: Env
 ): Record<string, string> {
   const origin = request.headers.get("Origin");
+
   const allowed = (env.ALLOWED_ORIGINS || "")
     .split(",")
     .map((item) => item.trim())
@@ -375,8 +290,7 @@ function corsHeaders(
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods":
       "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -582,11 +496,7 @@ function ensureObject(value: unknown): JsonObject {
 }
 
 function normalizeValue(value: unknown): unknown {
-  if (value === undefined) {
-    return null;
-  }
-
-  if (value === null) {
+  if (value === undefined || value === null) {
     return null;
   }
 
@@ -668,6 +578,7 @@ function parseWhere(
   }
 
   const conditions = ensureObject(where);
+
   const allowed = new Set(
     table.columns.map((column) => column.name)
   );
@@ -753,6 +664,7 @@ async function listRecords(
   }
 
   const sort = url.searchParams.get("sort");
+
   const order = (
     url.searchParams.get("order") || "ASC"
   ).toUpperCase();
