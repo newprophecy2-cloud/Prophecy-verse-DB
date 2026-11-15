@@ -6,8 +6,8 @@ workers_dev = true
 # D1 Database Binding
 [[d1_databases]]
 binding = "DB"
-database_name = "prophecy-verse-db"
-database_id = "D1_DATABASE_ID"
+database_name = "prophecyversedb"
+database_id = "ba4462bf-00c9-46fb-ad1b-dcd4c62f8a7a"
 
 # Worker Runtime
 [observability]
